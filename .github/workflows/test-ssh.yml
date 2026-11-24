@@ -1,0 +1,49 @@
+name: Test SSH Connection to cPanel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-ssh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required secrets
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          missing=0
+          for var in SSH_HOST SSH_USER SSH_PRIVATE_KEY; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Secret $var belum diisi di GitHub Repository Secrets."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Test SSH connection
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+          ssh -i ~/.ssh/id_deploy \
+            -p "$SSH_PORT" \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=15 \
+            "$SSH_USER@$SSH_HOST" \
+            "echo 'SSH Connected!' && whoami && pwd && if [ -n '$DEPLOY_PATH' ]; then ls -la '$DEPLOY_PATH'; fi"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_deploy
