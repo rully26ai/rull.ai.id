@@ -1,0 +1,107 @@
+name: Inspect cPanel Directory
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_dir:
+        description: 'Target directory relative to $HOME on cPanel'
+        required: false
+        default: 'public_html/berajah.ai.id'
+        type: string
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required secrets
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          missing=0
+          for var in SSH_HOST SSH_USER SSH_PRIVATE_KEY; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Secret $var is not set in GitHub Repository Secrets."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Inspect target directory via SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          TARGET_DIR: ${{ inputs.target_dir || 'public_html/berajah.ai.id' }}
+        run: |
+          if [[ "$TARGET_DIR" == /* ]] || [[ "$TARGET_DIR" == *..* ]] || [[ ! "$TARGET_DIR" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::Invalid target_dir: $TARGET_DIR"
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+          SSH_OPTS="-i ~/.ssh/id_deploy -p $SSH_PORT -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+
+          ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" bash -s -- "$TARGET_DIR" <<'REMOTE_EOF'
+          set -euo pipefail
+          TARGET_REL="$1"
+          DOCROOT="$HOME/$TARGET_REL"
+
+          echo "=== TARGET_DOCROOT ==="
+          echo "$DOCROOT"
+
+          if [ ! -d "$DOCROOT" ]; then
+            echo "Directory does not exist: $DOCROOT"
+            exit 0
+          fi
+
+          echo ""
+          echo "=== LS_DOCROOT ==="
+          ls -la "$DOCROOT"
+
+          echo ""
+          echo "=== KEY_FILES_CHECK ==="
+          for f in index.html index.php package.json wp-config.php .htaccess; do
+            if [ -e "$DOCROOT/$f" ]; then
+              echo "EXISTS: $f"
+            else
+              echo "MISSING: $f"
+            fi
+          done
+
+          if [ -f "$DOCROOT/index.html" ]; then
+            echo ""
+            echo "=== HEAD_INDEX_HTML (first 40 lines) ==="
+            head -n 40 "$DOCROOT/index.html"
+          fi
+
+          if [ -f "$DOCROOT/index.php" ]; then
+            echo ""
+            echo "=== HEAD_INDEX_PHP (first 40 lines) ==="
+            head -n 40 "$DOCROOT/index.php"
+          fi
+
+          if [ -f "$DOCROOT/package.json" ]; then
+            echo ""
+            echo "=== PACKAGE_JSON ==="
+            head -n 60 "$DOCROOT/package.json"
+          fi
+
+          if [ -d "$DOCROOT/assets" ]; then
+            echo ""
+            echo "=== LS_ASSETS ==="
+            ls -la "$DOCROOT/assets"
+          fi
+          REMOTE_EOF
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_deploy
