@@ -39,73 +39,18 @@ jobs:
 
           SSH_OPTS="-i ~/.ssh/id_deploy -p $SSH_PORT -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
 
-          ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" bash -s <<'REMOTE_EOF' > /tmp/remote_inspect.txt
-          echo "=== UAPI DomainInfo domains_data ==="
-          uapi DomainInfo domains_data 2>/dev/null || echo "uapi failed or unavailable"
-
-          echo ""
-          echo "=== USERDATA ==="
-          grep -rnE '^(domain|documentroot):' ~/.cpanel/userdata/ 2>/dev/null || true
-
-          echo ""
-          echo "=== PUBLIC_HTML ==="
-          ls -la ~/public_html 2>/dev/null || true
-
-          DOCROOT=""
-          if command -v uapi >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
-            DOCROOT=$(uapi --output=json DomainInfo domains_data 2>/dev/null | python3 -c '
-          import sys, json
-          try:
-            data = json.load(sys.stdin)
-            res = data.get("result", {}).get("data", {})
-            main = res.get("main_domain")
-            if isinstance(main, dict) and main.get("domain") == "rull.ai.id":
-              print(main.get("documentroot", ""))
-              sys.exit(0)
-            for k in ("addon_domains", "parked_domains", "sub_domains"):
-              for d in res.get(k, []) or []:
-                if isinstance(d, dict) and d.get("domain") == "rull.ai.id":
-                  print(d.get("documentroot", ""))
-                  sys.exit(0)
-          except Exception:
-            pass
-          ' 2>/dev/null)
-          fi
-
-          if [ -z "$DOCROOT" ]; then
-            UD_FILE=$(grep -rl "^domain: rull.ai.id$" ~/.cpanel/userdata/ 2>/dev/null | head -n 1)
-            if [ -n "$UD_FILE" ]; then
-              DOCROOT=$(grep -E '^documentroot:' "$UD_FILE" | head -n 1 | awk '{print $2}')
-            fi
-          fi
-
-          if [ -z "$DOCROOT" ] && [ -d "$HOME/rull.ai.id" ]; then
-            DOCROOT="$HOME/rull.ai.id"
-          fi
-
-          echo ""
+          ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" bash -s <<'REMOTE_EOF'
+          DOCROOT="$HOME/public_html/rull.ai.id"
           echo "=== RULL_AI_ID_DOCROOT ==="
           echo "$DOCROOT"
-
-          if [ -n "$DOCROOT" ] && [ -d "$DOCROOT" ]; then
-            echo ""
-            echo "=== RULL_AI_ID_FILES ==="
-            find "$DOCROOT" -maxdepth 4 -not -path '*/.*' -not -path '*/node_modules*' -not -path '*/vendor*' -ls 2>/dev/null
-          else
-            echo "DOCROOT not found or not a directory: $DOCROOT"
-          fi
+          echo ""
+          echo "=== RULL_AI_ID_FILES ==="
+          find "$DOCROOT" -maxdepth 4 -not -path '*/.*' -not -path '*/node_modules*' -not -path '*/vendor*' -ls 2>/dev/null
           REMOTE_EOF
 
-          cat /tmp/remote_inspect.txt
-
-          DOCROOT=$(awk '/^=== RULL_AI_ID_DOCROOT ===/{getline; print; exit}' /tmp/remote_inspect.txt)
-          echo "Detected DOCROOT: $DOCROOT"
-
-          if [ -n "$DOCROOT" ]; then
-            ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" "cd \"$DOCROOT\" && find . -maxdepth 4 -not -path '*/.*' -not -path './node_modules*' -not -path './vendor*' -type f -size -2M -print0 | tar --null -T - -czf -" | tar -xzf - -C /tmp/rull-site-files || true
-            echo "=== COPIED FILES ==="
-            find /tmp/rull-site-files -type f | sort
-          fi
+          ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" 'cd "$HOME/public_html/rull.ai.id" && find . -maxdepth 4 -not -path "*/.*" -not -path "./node_modules*" -not -path "./vendor*" -type f -size -2M -print0 | tar --null -T - -czf -' | tar -xzf - -C /tmp/rull-site-files
+          echo "=== COPIED FILES ==="
+          find /tmp/rull-site-files -type f | sort
 
       - name: Upload rull-site-files artifact
         uses: actions/upload-artifact@v4
