@@ -1,0 +1,85 @@
+/* ==========================================================================
+   rull.ai.id — ASCII Hermes 3D (relief berputar + cahaya dinamis)
+   3 layer <pre> bertumpuk: navy (bayangan), periwinkle (midtone), putih (highlight)
+   di atas biru kobalt. Fallback statis tampil hanya bila JS tidak jalan.
+   ========================================================================== */
+
+.portrait-frame.ascii-3d {
+  container-type: inline-size;
+  background-color: #2d2bcd;
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+.portrait-frame.ascii-3d.hw-noise::after {
+  opacity: 0.22;
+  z-index: 2;
+}
+
+.ascii-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ascii-layer,
+.ascii-fallback {
+  display: block;
+  margin: 0;
+  padding: 0;
+  white-space: pre;
+  text-align: left;
+  overflow: hidden;
+  max-height: 999999px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", "Courier New", monospace;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+  font-kerning: none;
+  letter-spacing: 0;
+  font-weight: 700;
+  /* fallback tanpa JS: advance ~0.6em, 140 kolom; JS menyetel ulang agar pas lebar frame */
+  font-size: var(--ascii-fs, 1.19cqw);
+  line-height: var(--ascii-lh, calc(125cqw / 108));
+  -webkit-font-smoothing: antialiased;
+  pointer-events: none;
+}
+
+.ascii-layer {
+  position: absolute;
+  inset: 0;
+  contain: strict;
+  transform-origin: top left;
+  will-change: auto;
+}
+
+.ascii-fallback {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  color: #8c90ff;
+}
+
+.ascii-fallback[hidden] {
+  display: none;
+}
+
+.ascii-fallback b {
+  font-weight: 700;
+  color: #fafaff;
+}
+
+.ascii-fallback i {
+  font-style: normal;
+  color: #12127a;
+}
+
+.ascii-layer--navy { color: #12127a; }
+.ascii-layer--mid { color: #8c90ff; }
+.ascii-layer--hi { color: #fafaff; }

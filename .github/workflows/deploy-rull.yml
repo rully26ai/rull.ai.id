@@ -1,0 +1,78 @@
+name: Deploy rull.ai.id
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          missing=0
+          for var in SSH_HOST SSH_USER SSH_PRIVATE_KEY; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Secret $var is not set in GitHub Repository Secrets."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Backup existing files and deploy via SCP
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+          SSH_OPTS="-i ~/.ssh/id_deploy -p $SSH_PORT -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+          SCP_OPTS="-i ~/.ssh/id_deploy -P $SSH_PORT -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+
+          ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" bash -s <<'REMOTE_EOF'
+          set -euo pipefail
+          TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+          BACKUP_DIR="$HOME/backups/rull.ai.id/$TIMESTAMP"
+          DOCROOT="$HOME/public_html/rull.ai.id"
+
+          mkdir -p "$BACKUP_DIR" "$DOCROOT/assets"
+
+          for f in "index.html" "assets/portrait-ascii-3d.css" "assets/portrait-ascii-3d.js"; do
+            if [ -f "$DOCROOT/$f" ]; then
+              cp -p "$DOCROOT/$f" "$BACKUP_DIR/"
+            fi
+          done
+
+          echo "=== BACKUP_PATH ==="
+          echo "$BACKUP_DIR"
+          echo "=== BACKUP_CONTENTS ==="
+          ls -la "$BACKUP_DIR"
+          REMOTE_EOF
+
+          scp $SCP_OPTS index.html "$SSH_USER@$SSH_HOST:~/public_html/rull.ai.id/index.html"
+          scp $SCP_OPTS assets/portrait-ascii-3d.css assets/portrait-ascii-3d.js "$SSH_USER@$SSH_HOST:~/public_html/rull.ai.id/assets/"
+
+          ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" bash -s <<'VERIFY_EOF'
+          set -euo pipefail
+          echo "=== VERIFY_ASSETS ==="
+          ls -la ~/public_html/rull.ai.id/assets/portrait-ascii-3d.*
+          echo "=== VERIFY_INDEX_HTML ==="
+          grep portrait-ascii-3d ~/public_html/rull.ai.id/index.html
+          VERIFY_EOF
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_deploy
