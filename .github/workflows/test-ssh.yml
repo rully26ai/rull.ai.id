@@ -42,7 +42,7 @@ jobs:
             -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=15 \
             "$SSH_USER@$SSH_HOST" \
-            "echo 'SSH Connected!' && whoami && pwd && if [ -n '$DEPLOY_PATH' ]; then ls -la '$DEPLOY_PATH'; fi"
+            "echo '=== HOME ===' && ls -la ~ && echo '=== ETC DOMAINS ===' && ls -1 ~/etc 2>/dev/null || true && echo '=== USERDATA ===' && grep -E '^(domain|documentroot):' ~/.cpanel/userdata/\$USER/* 2>/dev/null | head -n 100 || true"
 
       - name: Cleanup SSH key
         if: always()
